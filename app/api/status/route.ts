@@ -1,46 +1,42 @@
 // File: app/api/status/route.ts
-// --- DEFINITIVE FIX ---
+// --- THE FINAL DIAGNOSTIC ---
 
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 
 export async function GET(req: NextRequest) {
+  console.log("--- STARTING FINAL SDK INSPECTION (using dynamic import) ---");
   try {
-    // Dynamically import the module.
     const module = await import('hyperliquid-sdk');
-    // The actual exports are on the .default property.
-    const hl:any = module.default;
+    
+    console.log("✅ SDK module loaded via dynamic import.");
+    
+    // Log the entire module object for inspection
+    console.log("Full module object:", JSON.stringify(module, null, 2));
 
-    const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
-    if (!privateKey) {
-      throw new Error("Backend wallet not configured.");
+    // Log the top-level keys
+    console.log("Top-level keys of module:", Object.keys(module));
+
+    // Explicitly check the two possibilities from our previous attempts
+    if (module && module.default) {
+      console.log("✅ module.default EXISTS.");
+      console.log("Keys within module.default:", Object.keys(module.default));
+    } else {
+      console.log("❌ module.default DOES NOT exist.");
     }
 
-    const wallet = new ethers.Wallet(privateKey);
-    
-    // Access the Info class through the correct path.
-    const Info = hl.Hyperliquid.Info;
-    const info = new Info("mainnet", false);
+    if (module && module.Hyperliquid) {
+      console.log("✅ module.Hyperliquid EXISTS.");
+      console.log("Keys within module.Hyperliquid:", Object.keys(module.Hyperliquid));
+    } else {
+         console.log("❌ module.Hyperliquid DOES NOT exist.");
+    }
 
-    const userState = await info.userState(wallet.address);
-    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC");
-    const positionSize = btcPosition ? parseFloat(btcPosition.position.szi) : 0;
-    const entryPrice = btcPosition ? parseFloat(btcPosition.position.entryPx) : 0;
-    
-    const botStatus = {
-      isActive: true,
-      position: {
-        size: positionSize,
-        entryPrice: entryPrice || 'N/A'
-      },
-      lastSignal: "Awaiting Run",
-    };
+    return NextResponse.json({ 
+      message: "Final inspection complete. Please check the Vercel function logs."
+    });
 
-    return NextResponse.json(botStatus);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    console.error("Failed to fetch status:", errorMessage);
-    // Return the specific error for better debugging.
-    return NextResponse.json({ error: `Failed to fetch status: ${errorMessage}` }, { status: 500 });
+  } catch (error: any) {
+    console.error("❌ CRITICAL ERROR during SDK inspection:", error.message);
+    return NextResponse.json({ error: `Failed during inspection: ${error.message}` }, { status: 500 });
   }
 }
