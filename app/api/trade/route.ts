@@ -1,5 +1,5 @@
 // File: app/api/trade/route.ts
-// --- DEFINITIVE FIX ---
+// --- FINAL WORKING VERSION ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
@@ -34,18 +34,15 @@ function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
 
 export async function POST(req: NextRequest) {
   try {
-    // Dynamically import the module.
-    const module = await import('hyperliquid-sdk');
-    // The actual exports are on the .default property.
-    const hl:any = module.default;
+    // The module is a flat object with all exports as properties.
+    const hl = await import('hyperliquid-sdk');
 
     const now = new Date();
     const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
     
-    // ... rest of the function remains the same logic
     if (daysSinceAnchor % 5 !== 4) {
-      console.log(`Not an execution day. Day ${daysSinceAnchor % 5 + 1}/5 in cycle. Exiting.`);
-      return NextResponse.json({ success: true, message: "Not an execution day." });
+       console.log(`Not an execution day. Day ${daysSinceAnchor % 5 + 1}/5 in cycle. Exiting.`);
+       return NextResponse.json({ success: true, message: "Not an execution day." });
     }
 
     console.log("✅ Execution Day! Running 5-Day EMA strategy...");
@@ -57,13 +54,15 @@ export async function POST(req: NextRequest) {
     
     const wallet = new ethers.Wallet(privateKey);
     
-    const Info = hl.Hyperliquid.Info;
-    const Exchange = hl.Hyperliquid.Exchange;
+    // CORRECT ACCESS: Classes are direct properties of the module.
+    const Info = hl.Info;
+    const Exchange = hl.Exchange;
     
     const info = new Info("mainnet", false);
     const exchange = new Exchange(wallet, "mainnet");
     await exchange.connect();
     
+    // ... rest of the function is the same ...
     console.log(`Fetching daily ('1D') kline data for ${ASSET}...`);
     const startTime = Date.now() - (300 * 24 * 60 * 60 * 1000);
     const dailyKlines = await info.klines(ASSET, "1D", startTime);
