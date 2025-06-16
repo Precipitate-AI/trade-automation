@@ -1,23 +1,24 @@
 // File: app/api/status/route.ts
-// --- FINAL, CORRECTED VERSION ---
+// --- DEFINITIVE FIX ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 
 export async function GET(req: NextRequest) {
-  // Use dynamic import() to ensure this only runs on the server
-  // and doesn't break the client-side build.
-  const hl: any = await import('hyperliquid-sdk');
-
-  const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
-  if (!privateKey) {
-    return NextResponse.json({ error: "Backend wallet not configured." }, { status: 500 });
-  }
-
   try {
+    // Dynamically import the module.
+    const module = await import('hyperliquid-sdk');
+    // The actual exports are on the .default property.
+    const hl:any = module.default;
+
+    const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
+    if (!privateKey) {
+      throw new Error("Backend wallet not configured.");
+    }
+
     const wallet = new ethers.Wallet(privateKey);
     
-    // The access pattern from our logs is still correct:
+    // Access the Info class through the correct path.
     const Info = hl.Hyperliquid.Info;
     const info = new Info("mainnet", false);
 
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Failed to fetch status:", errorMessage);
-    return NextResponse.json({ error: `Runtime error in /api/status: ${errorMessage}` }, { status: 500 });
+    // Return the specific error for better debugging.
+    return NextResponse.json({ error: `Failed to fetch status: ${errorMessage}` }, { status: 500 });
   }
 }

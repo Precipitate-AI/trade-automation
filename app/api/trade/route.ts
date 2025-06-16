@@ -1,5 +1,5 @@
 // File: app/api/trade/route.ts
-// --- FINAL, CORRECTED VERSION ---
+// --- DEFINITIVE FIX ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
@@ -33,44 +33,44 @@ function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
 }
 
 export async function POST(req: NextRequest) {
-  // Use dynamic import() to ensure this only runs on the server
-  // and doesn't break the client-side build.
-  const hl: any = await import('hyperliquid-sdk');
-
-  const now = new Date();
-  const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
-  
-  if (daysSinceAnchor % 5 !== 4) {
-     console.log(`Not an execution day. Day ${daysSinceAnchor % 5 + 1}/5 in cycle. Exiting.`);
-     return NextResponse.json({ success: true, message: "Not an execution day." });
-  }
-
-  console.log("✅ Execution Day! Running 5-Day EMA strategy...");
-
-  const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
-  if (!privateKey) {
-    console.error("Critical Error: Private key not found.");
-    return NextResponse.json({ success: false, error: "Server configuration error." }, { status: 500 });
-  }
-
-  const wallet = new ethers.Wallet(privateKey);
-  
-  // The access pattern from our logs is still correct:
-  const Info = hl.Hyperliquid.Info;
-  const Exchange = hl.Hyperliquid.Exchange;
-  
-  const info = new Info("mainnet", false);
-  const exchange = new Exchange(wallet, "mainnet");
-  await exchange.connect();
-  
   try {
+    // Dynamically import the module.
+    const module = await import('hyperliquid-sdk');
+    // The actual exports are on the .default property.
+    const hl:any = module.default;
+
+    const now = new Date();
+    const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
+    
+    // ... rest of the function remains the same logic
+    if (daysSinceAnchor % 5 !== 4) {
+      console.log(`Not an execution day. Day ${daysSinceAnchor % 5 + 1}/5 in cycle. Exiting.`);
+      return NextResponse.json({ success: true, message: "Not an execution day." });
+    }
+
+    console.log("✅ Execution Day! Running 5-Day EMA strategy...");
+
+    const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
+    if (!privateKey) {
+      throw new Error("Server configuration error: Private key not found.");
+    }
+    
+    const wallet = new ethers.Wallet(privateKey);
+    
+    const Info = hl.Hyperliquid.Info;
+    const Exchange = hl.Hyperliquid.Exchange;
+    
+    const info = new Info("mainnet", false);
+    const exchange = new Exchange(wallet, "mainnet");
+    await exchange.connect();
+    
     console.log(`Fetching daily ('1D') kline data for ${ASSET}...`);
     const startTime = Date.now() - (300 * 24 * 60 * 60 * 1000);
     const dailyKlines = await info.klines(ASSET, "1D", startTime);
     const syntheticCandles = createSynthetic5DCandles(dailyKlines);
     
     if (syntheticCandles.length < EMA_PERIOD + 2) {
-      throw new Error("Not enough data to form synthetic candles for EMA calculation.");
+      throw new Error("Not enough data for EMA calculation.");
     }
     
     const closingPrices = syntheticCandles.map((c: any) => c.c);
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, message: "Strategy executed successfully." });
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Strategy execution failed:", errorMessage);
