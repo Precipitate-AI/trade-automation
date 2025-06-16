@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { Info } from "hyperliquid-sdk";
+import * as hl from "hyperliquid-sdk";
 
 export async function GET(req: NextRequest) {
   const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;

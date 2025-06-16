@@ -1,9 +1,11 @@
 // File: app/api/trade/route.ts
+// --- CORRECTED VERSION ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { Exchange, Info, Kline, OrderRequest } from "hyperliquid-sdk";
 import { EMA } from "technicalindicators";
+// CORRECTED IMPORT: Import the entire library as `hl`
+import * as hl from "hyperliquid-sdk";
 
 // --- STRATEGY CONFIGURATION ---
 const ASSET = "BTC";
@@ -13,9 +15,10 @@ const EMA_PERIOD = 5;
 const ANCHOR_DATE_STRING = "2024-06-20T00:00:00Z";
 const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 
+// Corrected Types
 type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
 
-function createSynthetic5DCandles(dailyKlines: Kline[]): SyntheticCandle[] {
+function createSynthetic5DCandles(dailyKlines: hl.Kline[]): SyntheticCandle[] {
   const syntheticCandles: SyntheticCandle[] = [];
   for (let i = 0; i < dailyKlines.length; i += 5) {
     const chunk = dailyKlines.slice(i, i + 5);
@@ -50,8 +53,9 @@ export async function POST(req: NextRequest) {
   }
 
   const wallet = new ethers.Wallet(privateKey);
-  const info = new Info("mainnet", false);
-  const exchange = new Exchange(wallet, "mainnet");
+  // CORRECTED USAGE
+  const info = new hl.Info("mainnet", false);
+  const exchange = new hl.Exchange(wallet, "mainnet");
   await exchange.connect();
   
   try {
@@ -82,14 +86,17 @@ export async function POST(req: NextRequest) {
     const assetPrice = parseFloat(allMids[ASSET]);
     const orderSizeInAsset = ORDER_SIZE_USD / assetPrice;
 
+    // CORRECTED USAGE
+    let orderRequest: hl.OrderRequest;
+
     if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
       console.log("ENTRY SIGNAL: Placing Market Buy order.");
-      const orderRequest: OrderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
+      orderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
       await exchange.order(orderRequest);
       console.log("BUY order placed successfully.");
     } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
       console.log("EXIT SIGNAL: Closing long position.");
-      const orderRequest: OrderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
+      orderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
       await exchange.order(orderRequest);
       console.log("SELL order placed successfully.");
     } else {
