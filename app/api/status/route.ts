@@ -1,41 +1,40 @@
 // File: app/api/status/route.ts
+// --- FINAL FIX using require() ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import * as hl from "hyperliquid-sdk";
+// FIX: Use require() for maximum compatibility with CommonJS modules.
+const hl = require('hyperliquid-sdk');
 
 export async function GET(req: NextRequest) {
   const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
   if (!privateKey) {
-    // This isn't a critical error for the frontend, so we just return a default state
     return NextResponse.json({ error: "Backend wallet not configured." }, { status: 500 });
   }
 
   try {
     const wallet = new ethers.Wallet(privateKey);
-    const info = new Info("mainnet", false);
+    // FIX: Access the Info class directly on the required module.
+    const info = new hl.Info("mainnet", false);
 
-    // Fetch user state which contains position information
     const userState = await info.userState(wallet.address);
-    const btcPosition = userState.assetPositions.find(p => p.position.coin === "BTC");
+    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC");
     const positionSize = btcPosition ? parseFloat(btcPosition.position.szi) : 0;
     const entryPrice = btcPosition ? parseFloat(btcPosition.position.entryPx) : 0;
-
-    // In a real-world scenario, you would also fetch last signal/logs from a DB
-    // For now, we'll send back the live position data.
+    
     const botStatus = {
-      isActive: true, // You can build logic to change this
+      isActive: true,
       position: {
         size: positionSize,
-        entryPrice: entryPrice
+        entryPrice: entryPrice || 'N/A'
       },
-      lastSignal: "Checking...", // Placeholder
+      lastSignal: "Awaiting Run",
     };
 
     return NextResponse.json(botStatus);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Failed to fetch status:", errorMessage);
-    return NextResponse.json({ error: "Failed to fetch bot status." }, { status: 500 });
+    return NextResponse.json({ error: `Failed to fetch status: ${errorMessage}` }, { status: 500 });
   }
 }

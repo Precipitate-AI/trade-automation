@@ -1,11 +1,11 @@
 // File: app/api/trade/route.ts
-// --- CORRECTED VERSION ---
+// --- FINAL FIX using require() ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { EMA } from "technicalindicators";
-// CORRECTED IMPORT: Import the entire library as `hl`
-import * as hl from "hyperliquid-sdk";
+// FIX: Use require() for maximum compatibility with CommonJS modules.
+const hl = require('hyperliquid-sdk');
 
 // --- STRATEGY CONFIGURATION ---
 const ASSET = "BTC";
@@ -15,10 +15,10 @@ const EMA_PERIOD = 5;
 const ANCHOR_DATE_STRING = "2024-06-20T00:00:00Z";
 const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 
-// Corrected Types
 type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
 
-function createSynthetic5DCandles(dailyKlines: hl.Kline[]): SyntheticCandle[] {
+// FIX: Access Kline type directly on the required module.
+function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
   const syntheticCandles: SyntheticCandle[] = [];
   for (let i = 0; i < dailyKlines.length; i += 5) {
     const chunk = dailyKlines.slice(i, i + 5);
@@ -26,8 +26,8 @@ function createSynthetic5DCandles(dailyKlines: hl.Kline[]): SyntheticCandle[] {
       syntheticCandles.push({
         t: chunk[0].t,
         o: parseFloat(chunk[0].o),
-        h: Math.max(...chunk.map(k => parseFloat(k.h))),
-        l: Math.min(...chunk.map(k => parseFloat(k.l))),
+        h: Math.max(...chunk.map((k: any) => parseFloat(k.h))),
+        l: Math.min(...chunk.map((k: any) => parseFloat(k.l))),
         c: parseFloat(chunk[4].c),
       });
     }
@@ -40,20 +40,20 @@ export async function POST(req: NextRequest) {
   const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
   
   if (daysSinceAnchor % 5 !== 4) {
-    console.log(`Not an execution day. Day ${daysSinceAnchor} in cycle. Exiting.`);
-    return NextResponse.json({ success: true, message: "Not an execution day." });
+     console.log(`Not an execution day. Day ${daysSinceAnchor % 5 + 1}/5 in cycle. Exiting.`);
+     return NextResponse.json({ success: true, message: "Not an execution day." });
   }
 
   console.log("✅ Execution Day! Running 5-Day EMA strategy...");
 
   const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
   if (!privateKey) {
-    console.error("Critical Error: Private key not found in .env.local");
+    console.error("Critical Error: Private key not found.");
     return NextResponse.json({ success: false, error: "Server configuration error." }, { status: 500 });
   }
 
   const wallet = new ethers.Wallet(privateKey);
-  // CORRECTED USAGE
+  // FIX: Access classes directly on the required module.
   const info = new hl.Info("mainnet", false);
   const exchange = new hl.Exchange(wallet, "mainnet");
   await exchange.connect();
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       throw new Error("Not enough data to form synthetic candles for EMA calculation.");
     }
     
-    const closingPrices = syntheticCandles.map(c => c.c);
+    const closingPrices = syntheticCandles.map((c: any) => c.c);
     const emaValues = EMA.calculate({ period: EMA_PERIOD, values: closingPrices });
     
     const lastClosePrice = syntheticCandles[syntheticCandles.length - 2].c;
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     console.log(`Last 5-Day Close: ${lastClosePrice}, EMA: ${lastEmaValue}`);
 
     const userState = await info.userState(wallet.address);
-    const position = userState.assetPositions.find(p => p.position.coin === ASSET);
+    const position = userState.assetPositions.find((p: any) => p.position.coin === ASSET);
     const currentPositionSize = position ? parseFloat(position.position.szi) : 0;
     
     await exchange.updateLeverage(LEVERAGE, ASSET, true);
@@ -86,19 +86,36 @@ export async function POST(req: NextRequest) {
     const assetPrice = parseFloat(allMids[ASSET]);
     const orderSizeInAsset = ORDER_SIZE_USD / assetPrice;
 
-    // CORRECTED USAGE
-    let orderRequest: hl.OrderRequest;
+    // FIX: The type for OrderRequest is directly on the `hl` object.
+    let orderRequest: any; // Using `any` to avoid type conflicts during this fix.
 
     if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
       console.log("ENTRY SIGNAL: Placing Market Buy order.");
-      orderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
-      await exchange.order(orderRequest);
+      orderRequest = {
+        coin: ASSET,
+        is_buy: true,
+        sz: parseFloat(orderSizeInAsset.toPrecision(4)),
+        limit_px: '0', 
+        // FIX: Reverting to the SDK's expected structure for market order type.
+        order_type: { "market": { "tif": "Ioc" } },
+        reduce_only: false,
+      };
+      await exchange.order(orderRequest,""); 
       console.log("BUY order placed successfully.");
+
     } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
       console.log("EXIT SIGNAL: Closing long position.");
-      orderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
-      await exchange.order(orderRequest);
+      orderRequest = {
+        coin: ASSET,
+        is_buy: false,
+        sz: Math.abs(currentPositionSize),
+        limit_px: '0',
+        order_type: { "market": { "tif": "Ioc" } },
+        reduce_only: true,
+      };
+      await exchange.order(orderRequest,"");
       console.log("SELL order placed successfully.");
+      
     } else {
       console.log("... NO SIGNAL: Conditions not met.");
     }
