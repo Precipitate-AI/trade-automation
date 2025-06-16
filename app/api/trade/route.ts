@@ -1,12 +1,9 @@
 // File: app/api/trade/route.ts
-// --- THE DEFINITIVE SOLUTION ---
+// --- FINAL, CORRECTED VERSION ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { EMA } from "technicalindicators";
-
-// Use require() and type as `any` to bypass incorrect TypeScript definitions.
-const hl: any = require('hyperliquid-sdk');
 
 // --- STRATEGY CONFIGURATION ---
 const ASSET = "BTC";
@@ -36,6 +33,10 @@ function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Use dynamic import() to ensure this only runs on the server
+  // and doesn't break the client-side build.
+  const hl: any = await import('hyperliquid-sdk');
+
   const now = new Date();
   const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
   
@@ -53,9 +54,10 @@ export async function POST(req: NextRequest) {
   }
 
   const wallet = new ethers.Wallet(privateKey);
-  // CORRECT ACCESS: Classes are on the .default property.
-  const Info = hl.default.Info;
-  const Exchange = hl.default.Exchange;
+  
+  // The access pattern from our logs is still correct:
+  const Info = hl.Hyperliquid.Info;
+  const Exchange = hl.Hyperliquid.Exchange;
   
   const info = new Info("mainnet", false);
   const exchange = new Exchange(wallet, "mainnet");
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
     const position = userState.assetPositions.find((p: any) => p.position.coin === ASSET);
     const currentPositionSize = position ? parseFloat(position.position.szi) : 0;
     
-    await exchange.updateLeverage(LEVERAGE, ASSET, false); // `is_cross` should be boolean
+    await exchange.updateLeverage(LEVERAGE, ASSET, false);
 
     const allMids = await info.allMids();
     const assetPrice = parseFloat(allMids[ASSET]);
@@ -93,33 +95,19 @@ export async function POST(req: NextRequest) {
 
     if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
       console.log("ENTRY SIGNAL: Placing Market Buy order.");
-      orderRequest = {
-        coin: ASSET,
-        is_buy: true,
-        sz: parseFloat(orderSizeInAsset.toPrecision(4)),
-        limit_px: '0', 
-        order_type: { "market": { "tif": "Ioc" } },
-        reduce_only: false,
-      };
+      orderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: '0', order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
       await exchange.order(orderRequest,""); 
 
     } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
       console.log("EXIT SIGNAL: Closing long position.");
-      orderRequest = {
-        coin: ASSET,
-        is_buy: false,
-        sz: Math.abs(currentPositionSize),
-        limit_px: '0',
-        order_type: { "market": { "tif": "Ioc" } },
-        reduce_only: true,
-      };
+      orderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: '0', order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
       await exchange.order(orderRequest,"");
+      
     } else {
       console.log("... NO SIGNAL: Conditions not met.");
     }
 
     return NextResponse.json({ success: true, message: "Strategy executed successfully." });
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Strategy execution failed:", errorMessage);

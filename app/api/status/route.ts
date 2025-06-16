@@ -1,34 +1,44 @@
 // File: app/api/status/route.ts
-// --- TEMPORARY DIAGNOSTIC CODE ---
+// --- FINAL, CORRECTED VERSION ---
 
 import { NextRequest, NextResponse } from "next/server";
+import { ethers } from "ethers";
 
 export async function GET(req: NextRequest) {
-  console.log("--- STARTING SDK MODULE INSPECTION ---");
+  // Use dynamic import() to ensure this only runs on the server
+  // and doesn't break the client-side build.
+  const hl: any = await import('hyperliquid-sdk');
+
+  const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
+  if (!privateKey) {
+    return NextResponse.json({ error: "Backend wallet not configured." }, { status: 500 });
+  }
+
   try {
-    const hl = require('hyperliquid-sdk');
+    const wallet = new ethers.Wallet(privateKey);
     
-    console.log("✅ SDK module loaded successfully.");
-    console.log("Type of loaded module:", typeof hl);
+    // The access pattern from our logs is still correct:
+    const Info = hl.Hyperliquid.Info;
+    const info = new Info("mainnet", false);
 
-    // We will log the keys of the module itself
-    console.log("Top-level keys of the module:", Object.keys(hl));
+    const userState = await info.userState(wallet.address);
+    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC");
+    const positionSize = btcPosition ? parseFloat(btcPosition.position.szi) : 0;
+    const entryPrice = btcPosition ? parseFloat(btcPosition.position.entryPx) : 0;
+    
+    const botStatus = {
+      isActive: true,
+      position: {
+        size: positionSize,
+        entryPrice: entryPrice || 'N/A'
+      },
+      lastSignal: "Awaiting Run",
+    };
 
-    // We will ALSO check for the '.default' property that has been causing issues
-    if (hl && hl.default) {
-      console.log("✅ '.default' property exists.");
-      console.log("Keys within '.default':", Object.keys(hl.default));
-    } else {
-      console.log("❌ '.default' property does NOT exist.");
-    }
-
-    // Return a success message so we know the function ran without crashing
-    return NextResponse.json({ 
-      message: "SDK inspection complete. Please check the Vercel function logs for the output of 'console.log'."
-    });
-
-  } catch (error: any) {
-    console.error("❌ CRITICAL ERROR during SDK inspection:", error.message);
-    return NextResponse.json({ error: `Failed during inspection: ${error.message}` }, { status: 500 });
+    return NextResponse.json(botStatus);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    console.error("Failed to fetch status:", errorMessage);
+    return NextResponse.json({ error: `Runtime error in /api/status: ${errorMessage}` }, { status: 500 });
   }
 }
