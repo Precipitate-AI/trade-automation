@@ -1,190 +1,106 @@
-import { NextResponse } from "next/server"
-import { aggregateToFiveDayCandles, calculateEMA, type DailyCandle } from "@/lib/utils"
-import { Info, Exchange, Wallet, type OrderRequest } from "hyperliquid-sdk" // Actual SDK import
+// File: app/api/trade/route.ts
 
-// --- Configuration ---
-const ANCHOR_DATE_STRING = "2024-06-20T00:00:00Z"
-const EMA_PERIOD = 5
-const BTC_ASSET_NAME = "BTC" // For Hyperliquid, typically just the asset name like "BTC" or "ETH" for perps
-const LEVERAGE = 5 // 5x
-const ORDER_USD_VALUE = 100 // $100
-const HYPERLIQUID_API_URL = "https://api.hyperliquid.xyz" // Mainnet API URL
-// const HYPERLIQUID_API_URL = "https://api.hyperliquid-testnet.xyz"; // Testnet API URL - uncomment to use testnet
+import { NextRequest, NextResponse } from "next/server";
+import { ethers } from "ethers";
+import { Exchange, Info, Kline, OrderRequest } from "hyperliquid-sdk";
+import { EMA } from "technicalindicators";
 
-export async function GET(request: Request) {
-  console.log("Trade API called at:", new Date().toISOString())
+// --- STRATEGY CONFIGURATION ---
+const ASSET = "BTC";
+const LEVERAGE = 5;
+const ORDER_SIZE_USD = 100;
+const EMA_PERIOD = 5;
+const ANCHOR_DATE_STRING = "2024-06-20T00:00:00Z";
+const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 
-  const hyperliquidPrivateKey = process.env.HYPERLIQUID_PRIVATE_KEY
-  if (!hyperliquidPrivateKey) {
-    console.error("HYPERLIQUID_PRIVATE_KEY environment variable not set.")
-    return NextResponse.json({ error: "Server configuration error: Missing private key." }, { status: 500 })
+type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
+
+function createSynthetic5DCandles(dailyKlines: Kline[]): SyntheticCandle[] {
+  const syntheticCandles: SyntheticCandle[] = [];
+  for (let i = 0; i < dailyKlines.length; i += 5) {
+    const chunk = dailyKlines.slice(i, i + 5);
+    if (chunk.length === 5) {
+      syntheticCandles.push({
+        t: chunk[0].t,
+        o: parseFloat(chunk[0].o),
+        h: Math.max(...chunk.map(k => parseFloat(k.h))),
+        l: Math.min(...chunk.map(k => parseFloat(k.l))),
+        c: parseFloat(chunk[4].c),
+      });
+    }
+  }
+  return syntheticCandles;
+}
+
+export async function POST(req: NextRequest) {
+  const now = new Date();
+  const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
+  
+  if (daysSinceAnchor % 5 !== 4) {
+    console.log(`Not an execution day. Day ${daysSinceAnchor} in cycle. Exiting.`);
+    return NextResponse.json({ success: true, message: "Not an execution day." });
   }
 
-  const wallet = new Wallet(hyperliquidPrivateKey)
-  const info = new Info(null, HYPERLIQUID_API_URL)
-  const exchange = new Exchange(wallet, HYPERLIQUID_API_URL)
+  console.log("✅ Execution Day! Running 5-Day EMA strategy...");
 
-  // 1. Timeframe Logic
-  const anchorTimestamp = new Date(ANCHOR_DATE_STRING).getTime()
-  const currentUtcDate = new Date()
-  currentUtcDate.setUTCHours(0, 0, 0, 0) // Normalize to start of current UTC day
-  const currentTimestamp = currentUtcDate.getTime()
-
-  const daysElapsed = Math.floor((currentTimestamp - anchorTimestamp) / (1000 * 60 * 60 * 24))
-
-  if (!((daysElapsed + 1) % 5 === 0 && daysElapsed >= 4)) {
-    const logMsg = `Not an execution day. Days elapsed since anchor: ${daysElapsed}. Today is day ${(daysElapsed % 5) + 1} of the current 5-day cycle.`
-    console.log(logMsg)
-    return NextResponse.json({ message: logMsg, status: "no_action_not_execution_day" })
+  const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
+  if (!privateKey) {
+    console.error("Critical Error: Private key not found in .env.local");
+    return NextResponse.json({ success: false, error: "Server configuration error." }, { status: 500 });
   }
-  console.log(`Execution day: ${currentUtcDate.toISOString()}. Days elapsed: ${daysElapsed}.`)
 
+  const wallet = new ethers.Wallet(privateKey);
+  const info = new Info("mainnet", false);
+  const exchange = new Exchange(wallet, "mainnet");
+  await exchange.connect();
+  
   try {
-    // 2. Fetch Daily Candles
-    const endTime = currentTimestamp // Candles up to the end of *yesterday* UTC
-    const startTime = endTime - 300 * 24 * 60 * 60 * 1000 // Approx 300 days ago
-
-    const rawCandles = await info.candlesSnapshot(BTC_ASSET_NAME, "1d", startTime, endTime)
-    const dailyCandles: DailyCandle[] = rawCandles.map((sdkCandle: any) => ({
-      timestamp: sdkCandle.t,
-      open: Number.parseFloat(sdkCandle.o),
-      high: Number.parseFloat(sdkCandle.h),
-      low: Number.parseFloat(sdkCandle.l),
-      close: Number.parseFloat(sdkCandle.c),
-    }))
-
-    if (dailyCandles.length < EMA_PERIOD * 5) {
-      const errorMsg = `Not enough daily candle data. Fetched: ${dailyCandles.length}, Required for EMA: ${EMA_PERIOD * 5}`
-      console.error(errorMsg)
-      return NextResponse.json({ error: errorMsg, status: "error_insufficient_data" }, { status: 500 })
+    console.log(`Fetching daily ('1D') kline data for ${ASSET}...`);
+    const startTime = Date.now() - (300 * 24 * 60 * 60 * 1000);
+    const dailyKlines = await info.klines(ASSET, "1D", startTime);
+    const syntheticCandles = createSynthetic5DCandles(dailyKlines);
+    
+    if (syntheticCandles.length < EMA_PERIOD + 2) {
+      throw new Error("Not enough data to form synthetic candles for EMA calculation.");
     }
-    console.log(`Fetched ${dailyCandles.length} daily candles for ${BTC_ASSET_NAME}.`)
+    
+    const closingPrices = syntheticCandles.map(c => c.c);
+    const emaValues = EMA.calculate({ period: EMA_PERIOD, values: closingPrices });
+    
+    const lastClosePrice = syntheticCandles[syntheticCandles.length - 2].c;
+    const lastEmaValue = emaValues[emaValues.length - 2];
 
-    // 3. Aggregate to 5-Day Candles
-    const syntheticCandles = aggregateToFiveDayCandles(dailyCandles)
-    if (syntheticCandles.length < EMA_PERIOD) {
-      const errorMsg = `Not enough synthetic 5-day candles for EMA. Generated: ${syntheticCandles.length}, Required: ${EMA_PERIOD}`
-      console.error(errorMsg)
-      return NextResponse.json({ error: errorMsg, status: "error_insufficient_synthetic_data" }, { status: 500 })
-    }
-    console.log(`Aggregated into ${syntheticCandles.length} synthetic 5-day candles.`)
+    console.log(`Last 5-Day Close: ${lastClosePrice}, EMA: ${lastEmaValue}`);
 
-    // 4. Calculate 5-period EMA
-    const closes = syntheticCandles.map((c) => c.close)
-    const emas = calculateEMA(closes, EMA_PERIOD)
-    const lastSyntheticCandle = syntheticCandles[syntheticCandles.length - 1]
-    const currentEma = emas[emas.length - 1]
+    const userState = await info.userState(wallet.address);
+    const position = userState.assetPositions.find(p => p.position.coin === ASSET);
+    const currentPositionSize = position ? parseFloat(position.position.szi) : 0;
+    
+    await exchange.updateLeverage(LEVERAGE, ASSET, true);
 
-    console.log(
-      `Last 5-Day Candle Close: ${lastSyntheticCandle.close} at ${new Date(lastSyntheticCandle.timestamp).toISOString()}`,
-    )
-    console.log(`Corresponding 5-period EMA: ${currentEma}`)
+    const allMids = await info.allMids();
+    const assetPrice = parseFloat(allMids[ASSET]);
+    const orderSizeInAsset = ORDER_SIZE_USD / assetPrice;
 
-    // 5. Get Current Position & Set Leverage
-    const userAddress = wallet.address
-    await exchange.updateLeverage(LEVERAGE, BTC_ASSET_NAME, false) // isCross = false
-    console.log(`Leverage for ${BTC_ASSET_NAME} set to ${LEVERAGE}x.`)
-
-    const userState = await info.userState(userAddress)
-    const btcAssetPosition = userState.assetPositions.find((p: any) => p.position.coin === BTC_ASSET_NAME)
-    const currentPositionBTCSize = btcAssetPosition ? Number.parseFloat(btcAssetPosition.position.szi) : 0
-    const currentPositionSide =
-      btcAssetPosition && currentPositionBTCSize !== 0 ? btcAssetPosition.position.side.toUpperCase() : null // 'B' or 'S'
-
-    console.log(`Current BTC Position: ${currentPositionBTCSize} BTC. Side: ${currentPositionSide || "None"}`)
-
-    // 6. Trading Strategy Logic
-    let actionTaken = "hold"
-    let orderDetails = {}
-
-    const allMarkPrices = await info.markPrices()
-    const currentBtcPrice = Number.parseFloat(allMarkPrices[BTC_ASSET_NAME])
-
-    if (!currentBtcPrice || currentBtcPrice <= 0) {
-      throw new Error("Could not fetch valid BTC mark price for order sizing.")
-    }
-
-    if (lastSyntheticCandle.close > currentEma) {
-      // Potential BUY signal
-      if (currentPositionBTCSize === 0 || (currentPositionSide === "S" && currentPositionBTCSize !== 0)) {
-        const btcSizeToBuy = ORDER_USD_VALUE / currentBtcPrice
-        console.log(`BUY Signal: Close (${lastSyntheticCandle.close}) > EMA (${currentEma}).`)
-        console.log(`Attempting to BUY ${btcSizeToBuy.toFixed(8)} BTC ($${ORDER_USD_VALUE} at $${currentBtcPrice}/BTC)`)
-
-        const orderRequest: OrderRequest = {
-          coin: BTC_ASSET_NAME,
-          is_buy: true,
-          sz: btcSizeToBuy,
-          limit_px: currentBtcPrice.toString(), // For market, can be current price or slightly worse
-          order_type: { Market: {} },
-          reduce_only: false,
-        }
-        const result = await exchange.order(orderRequest, wallet.address)
-        console.log("BUY Order Result:", result)
-        actionTaken = "buy_executed"
-        orderDetails = { side: "BUY", size: btcSizeToBuy, price: currentBtcPrice, result }
-      } else {
-        console.log(
-          `HOLD Signal: Close (${lastSyntheticCandle.close}) > EMA (${currentEma}), but already in a long position.`,
-        )
-        actionTaken = "hold_already_long"
-      }
-    } else if (lastSyntheticCandle.close < currentEma) {
-      // Potential SELL signal
-      if (currentPositionBTCSize !== 0 && currentPositionSide === "B") {
-        console.log(
-          `SELL Signal: Close (${lastSyntheticCandle.close}) < EMA (${currentEma}). Existing long position found.`,
-        )
-        console.log(`Attempting to SELL ${Math.abs(currentPositionBTCSize)} BTC (reduce-only)`)
-
-        const orderRequest: OrderRequest = {
-          coin: BTC_ASSET_NAME,
-          is_buy: false,
-          sz: Math.abs(currentPositionBTCSize), // Ensure positive size
-          limit_px: currentBtcPrice.toString(), // For market, can be current price or slightly better
-          order_type: { Market: {} },
-          reduce_only: true,
-        }
-        const result = await exchange.order(orderRequest, wallet.address)
-        console.log("SELL Order Result:", result)
-        actionTaken = "sell_executed"
-        orderDetails = { side: "SELL", size: Math.abs(currentPositionBTCSize), result }
-      } else {
-        console.log(
-          `HOLD Signal: Close (${lastSyntheticCandle.close}) < EMA (${currentEma}), but no existing long position to sell or is short.`,
-        )
-        actionTaken = "hold_not_long"
-      }
+    if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
+      console.log("ENTRY SIGNAL: Placing Market Buy order.");
+      const orderRequest: OrderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
+      await exchange.order(orderRequest);
+      console.log("BUY order placed successfully.");
+    } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
+      console.log("EXIT SIGNAL: Closing long position.");
+      const orderRequest: OrderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: "0", order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
+      await exchange.order(orderRequest);
+      console.log("SELL order placed successfully.");
     } else {
-      console.log(`HOLD Signal: Close (${lastSyntheticCandle.close}) == EMA (${currentEma}). No action.`)
-      actionTaken = "hold_close_equals_ema"
+      console.log("... NO SIGNAL: Conditions not met.");
     }
 
-    return NextResponse.json({
-      message: "Trade logic executed.",
-      status: "success",
-      action: actionTaken,
-      data: {
-        lastCandleClose: lastSyntheticCandle.close,
-        currentEma: currentEma,
-        currentPositionBTC: currentPositionBTCSize,
-        currentPositionSide: currentPositionSide,
-        currentBtcPrice: currentBtcPrice,
-      },
-      orderDetails,
-    })
-  } catch (error: any) {
-    console.error("Error during trade logic execution:", error)
-    const errorMessage = error.message || "An unknown error occurred."
-    const errorDetails = error.response?.data || error.stack // Include more details if available
-    return NextResponse.json(
-      {
-        error: "Trade logic execution failed.",
-        details: errorMessage,
-        sdkError: errorDetails,
-        status: "error_execution_failed",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ success: true, message: "Strategy executed successfully." });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    console.error("Strategy execution failed:", errorMessage);
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
