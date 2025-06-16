@@ -1,5 +1,5 @@
 // File: app/api/trade/route.ts
-// --- FINAL WORKING VERSION ---
+// --- THE CORRECT SDK USAGE ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
@@ -16,6 +16,7 @@ const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
 
 function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
+  // ... (function is unchanged)
   const syntheticCandles: SyntheticCandle[] = [];
   for (let i = 0; i < dailyKlines.length; i += 5) {
     const chunk = dailyKlines.slice(i, i + 5);
@@ -34,8 +35,8 @@ function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
 
 export async function POST(req: NextRequest) {
   try {
-    // The module is a flat object with all exports as properties.
     const hl = await import('hyperliquid-sdk');
+    const Hyperliquid = hl.Hyperliquid;
 
     const now = new Date();
     const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
@@ -54,15 +55,14 @@ export async function POST(req: NextRequest) {
     
     const wallet = new ethers.Wallet(privateKey);
     
-    // CORRECT ACCESS: Classes are direct properties of the module.
-    const Info = hl.Info;
-    const Exchange = hl.Exchange;
+    // THE CORRECT PATTERN:
+    // 1. Instantiate the main class.
+    const sdk = new Hyperliquid({ wallet });
+
+    // 2. Access the pre-configured clients.
+    const info = sdk.info;
+    const exchange = sdk.exchange;
     
-    const info = new Info("mainnet", false);
-    const exchange = new Exchange(wallet, "mainnet");
-    await exchange.connect();
-    
-    // ... rest of the function is the same ...
     console.log(`Fetching daily ('1D') kline data for ${ASSET}...`);
     const startTime = Date.now() - (300 * 24 * 60 * 60 * 1000);
     const dailyKlines = await info.klines(ASSET, "1D", startTime);
