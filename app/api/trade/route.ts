@@ -1,11 +1,12 @@
 // File: app/api/trade/route.ts
-// --- FINAL FIX using require() ---
+// --- THE DEFINITIVE SOLUTION ---
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { EMA } from "technicalindicators";
-// FIX: Use require() for maximum compatibility with CommonJS modules.
-const hl = require('hyperliquid-sdk');
+
+// Use require() and type as `any` to bypass incorrect TypeScript definitions.
+const hl: any = require('hyperliquid-sdk');
 
 // --- STRATEGY CONFIGURATION ---
 const ASSET = "BTC";
@@ -17,7 +18,6 @@ const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 
 type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
 
-// FIX: Access Kline type directly on the required module.
 function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
   const syntheticCandles: SyntheticCandle[] = [];
   for (let i = 0; i < dailyKlines.length; i += 5) {
@@ -53,9 +53,12 @@ export async function POST(req: NextRequest) {
   }
 
   const wallet = new ethers.Wallet(privateKey);
-  // FIX: Access classes directly on the required module.
-  const info = new hl.Info("mainnet", false);
-  const exchange = new hl.Exchange(wallet, "mainnet");
+  // CORRECT ACCESS: Classes are on the .default property.
+  const Info = hl.default.Info;
+  const Exchange = hl.default.Exchange;
+  
+  const info = new Info("mainnet", false);
+  const exchange = new Exchange(wallet, "mainnet");
   await exchange.connect();
   
   try {
@@ -80,14 +83,13 @@ export async function POST(req: NextRequest) {
     const position = userState.assetPositions.find((p: any) => p.position.coin === ASSET);
     const currentPositionSize = position ? parseFloat(position.position.szi) : 0;
     
-    await exchange.updateLeverage(LEVERAGE, ASSET, true);
+    await exchange.updateLeverage(LEVERAGE, ASSET, false); // `is_cross` should be boolean
 
     const allMids = await info.allMids();
     const assetPrice = parseFloat(allMids[ASSET]);
     const orderSizeInAsset = ORDER_SIZE_USD / assetPrice;
 
-    // FIX: The type for OrderRequest is directly on the `hl` object.
-    let orderRequest: any; // Using `any` to avoid type conflicts during this fix.
+    let orderRequest: any;
 
     if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
       console.log("ENTRY SIGNAL: Placing Market Buy order.");
@@ -96,12 +98,10 @@ export async function POST(req: NextRequest) {
         is_buy: true,
         sz: parseFloat(orderSizeInAsset.toPrecision(4)),
         limit_px: '0', 
-        // FIX: Reverting to the SDK's expected structure for market order type.
         order_type: { "market": { "tif": "Ioc" } },
         reduce_only: false,
       };
       await exchange.order(orderRequest,""); 
-      console.log("BUY order placed successfully.");
 
     } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
       console.log("EXIT SIGNAL: Closing long position.");
@@ -114,8 +114,6 @@ export async function POST(req: NextRequest) {
         reduce_only: true,
       };
       await exchange.order(orderRequest,"");
-      console.log("SELL order placed successfully.");
-      
     } else {
       console.log("... NO SIGNAL: Conditions not met.");
     }

@@ -1,40 +1,34 @@
 // File: app/api/status/route.ts
-// --- FINAL FIX using require() ---
+// --- TEMPORARY DIAGNOSTIC CODE ---
 
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
-// FIX: Use require() for maximum compatibility with CommonJS modules.
-const hl = require('hyperliquid-sdk');
 
 export async function GET(req: NextRequest) {
-  const privateKey = process.env.HYPERLIQUID_PRIVATE_KEY;
-  if (!privateKey) {
-    return NextResponse.json({ error: "Backend wallet not configured." }, { status: 500 });
-  }
-
+  console.log("--- STARTING SDK MODULE INSPECTION ---");
   try {
-    const wallet = new ethers.Wallet(privateKey);
-    // FIX: Access the Info class directly on the required module.
-    const info = new hl.Info("mainnet", false);
-
-    const userState = await info.userState(wallet.address);
-    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC");
-    const positionSize = btcPosition ? parseFloat(btcPosition.position.szi) : 0;
-    const entryPrice = btcPosition ? parseFloat(btcPosition.position.entryPx) : 0;
+    const hl = require('hyperliquid-sdk');
     
-    const botStatus = {
-      isActive: true,
-      position: {
-        size: positionSize,
-        entryPrice: entryPrice || 'N/A'
-      },
-      lastSignal: "Awaiting Run",
-    };
+    console.log("✅ SDK module loaded successfully.");
+    console.log("Type of loaded module:", typeof hl);
 
-    return NextResponse.json(botStatus);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    console.error("Failed to fetch status:", errorMessage);
-    return NextResponse.json({ error: `Failed to fetch status: ${errorMessage}` }, { status: 500 });
+    // We will log the keys of the module itself
+    console.log("Top-level keys of the module:", Object.keys(hl));
+
+    // We will ALSO check for the '.default' property that has been causing issues
+    if (hl && hl.default) {
+      console.log("✅ '.default' property exists.");
+      console.log("Keys within '.default':", Object.keys(hl.default));
+    } else {
+      console.log("❌ '.default' property does NOT exist.");
+    }
+
+    // Return a success message so we know the function ran without crashing
+    return NextResponse.json({ 
+      message: "SDK inspection complete. Please check the Vercel function logs for the output of 'console.log'."
+    });
+
+  } catch (error: any) {
+    console.error("❌ CRITICAL ERROR during SDK inspection:", error.message);
+    return NextResponse.json({ error: `Failed during inspection: ${error.message}` }, { status: 500 });
   }
 }
