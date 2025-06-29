@@ -6,10 +6,10 @@ import Image from "next/image"
 import WalletConnector from "@/components/wallet-connector"
 
 export const metadata: Metadata = {
-  title: "Insight - Hyperliquid Summaries",
-  description: "AI-powered summaries of Hyperliquid trading activity.",
+  title: "Trade Automation on Hyperliquid",
+  description: "AI-powered Trader Agent on Hyperliquid.",
   icons: {
-    icon: "/favicon.png",
+    icon: "/logo.png",
   },
     generator: 'v0.dev'
 }
