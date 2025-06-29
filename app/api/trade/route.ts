@@ -1,9 +1,8 @@
 // File: app/api/trade/route.ts
-// --- THE CORRECT SDK USAGE ---
-
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { EMA } from "technicalindicators";
+import { Hyperliquid, LeverageModeEnum } from 'hyperliquid-sdk';
 
 // --- STRATEGY CONFIGURATION ---
 const ASSET = "BTC";
@@ -16,7 +15,6 @@ const ANCHOR_TIMESTAMP = Date.parse(ANCHOR_DATE_STRING);
 type SyntheticCandle = { t: number; o: number; h: number; l: number; c: number; };
 
 function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
-  // ... (function is unchanged)
   const syntheticCandles: SyntheticCandle[] = [];
   for (let i = 0; i < dailyKlines.length; i += 5) {
     const chunk = dailyKlines.slice(i, i + 5);
@@ -35,9 +33,6 @@ function createSynthetic5DCandles(dailyKlines: any[]): SyntheticCandle[] {
 
 export async function POST(req: NextRequest) {
   try {
-    const hl = await import('hyperliquid-sdk');
-    const Hyperliquid = hl.Hyperliquid;
-
     const now = new Date();
     const daysSinceAnchor = Math.floor((now.getTime() - ANCHOR_TIMESTAMP) / (1000 * 60 * 60 * 24));
     
@@ -54,18 +49,11 @@ export async function POST(req: NextRequest) {
     }
     
     const wallet = new ethers.Wallet(privateKey);
-    
-    // THE CORRECT PATTERN:
-    // 1. Instantiate the main class.
-    const sdk = new Hyperliquid({ wallet });
-
-    // 2. Access the pre-configured clients.
-    const info = sdk.info;
-    const exchange = sdk.exchange;
+    const sdk = new Hyperliquid(wallet);
     
     console.log(`Fetching daily ('1D') kline data for ${ASSET}...`);
     const startTime = Date.now() - (300 * 24 * 60 * 60 * 1000);
-    const dailyKlines = await info.klines(ASSET, "1D", startTime);
+    const dailyKlines = await sdk.info.getCandleSnapshot(ASSET, "1D", startTime, Date.now());
     const syntheticCandles = createSynthetic5DCandles(dailyKlines);
     
     if (syntheticCandles.length < EMA_PERIOD + 2) {
@@ -80,13 +68,13 @@ export async function POST(req: NextRequest) {
 
     console.log(`Last 5-Day Close: ${lastClosePrice}, EMA: ${lastEmaValue}`);
 
-    const userState = await info.userState(wallet.address);
+    const userState = await sdk.info.perpetuals.getClearinghouseState(wallet.address);
     const position = userState.assetPositions.find((p: any) => p.position.coin === ASSET);
     const currentPositionSize = position ? parseFloat(position.position.szi) : 0;
     
-    await exchange.updateLeverage(LEVERAGE, ASSET, false);
+    await sdk.exchange.updateLeverage(ASSET, LeverageModeEnum.CROSS, LEVERAGE as any);
 
-    const allMids = await info.allMids();
+    const allMids = await sdk.info.getAllMids();
     const assetPrice = parseFloat(allMids[ASSET]);
     const orderSizeInAsset = ORDER_SIZE_USD / assetPrice;
 
@@ -95,19 +83,18 @@ export async function POST(req: NextRequest) {
     if (lastClosePrice > lastEmaValue && currentPositionSize === 0) {
       console.log("ENTRY SIGNAL: Placing Market Buy order.");
       orderRequest = { coin: ASSET, is_buy: true, sz: parseFloat(orderSizeInAsset.toPrecision(4)), limit_px: '0', order_type: { "market": { "tif": "Ioc" } }, reduce_only: false };
-      await exchange.order(orderRequest,""); 
+      await sdk.exchange.placeOrder(orderRequest); 
 
     } else if (lastClosePrice < lastEmaValue && currentPositionSize > 0) {
       console.log("EXIT SIGNAL: Closing long position.");
       orderRequest = { coin: ASSET, is_buy: false, sz: Math.abs(currentPositionSize), limit_px: '0', order_type: { "market": { "tif": "Ioc" } }, reduce_only: true };
-      await exchange.order(orderRequest,"");
+      await sdk.exchange.placeOrder(orderRequest);
       
     } else {
       console.log("... NO SIGNAL: Conditions not met.");
     }
 
     return NextResponse.json({ success: true, message: "Strategy executed successfully." });
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Strategy execution failed:", errorMessage);

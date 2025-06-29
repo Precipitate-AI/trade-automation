@@ -1,6 +1,4 @@
 // File: app/trade-dashboard/page.tsx
-// This is the complete, merged file with live data fetching.
-
 'use client'; // This component must be a client component to use hooks
 
 import { useState, useEffect } from "react";
