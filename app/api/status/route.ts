@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const sdk = new Hyperliquid(wallet);
 
     const userState = await sdk.info.perpetuals.getClearinghouseState(wallet.address);
-    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC");
+    const btcPosition = userState.assetPositions.find((p: any) => p.position.coin === "BTC-PERP");
     const positionSize = btcPosition ? parseFloat(btcPosition.position.szi) : 0;
     const entryPrice = btcPosition ? parseFloat(btcPosition.position.entryPx) : 0;
     

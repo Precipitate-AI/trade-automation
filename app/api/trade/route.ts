@@ -5,7 +5,7 @@ import { EMA } from "technicalindicators";
 import { Hyperliquid, LeverageModeEnum } from 'hyperliquid-sdk';
 
 // --- STRATEGY CONFIGURATION ---
-const ASSET = "BTC";
+const ASSET = "BTC-PERP";
 const LEVERAGE = 5;
 const ORDER_SIZE_USD = 100;
 const EMA_PERIOD = 5;

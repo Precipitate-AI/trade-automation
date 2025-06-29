@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
     const wallet = new ethers.Wallet(privateKey);
     const sdk = new Hyperliquid(wallet);
 
+    // Log all available assets
+    const allAssets = await sdk.custom.getAllAssets();
+    console.log("All available assets:", allAssets);
     // Set leverage if provided
     if (leverage) {
       console.log(`Setting leverage for ${coin} to ${leverage}x`);
