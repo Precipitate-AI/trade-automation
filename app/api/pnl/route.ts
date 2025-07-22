@@ -7,22 +7,25 @@ import type { DailyCandle } from "@/lib/utils"
 const startTime = new Date('2017-01-01').getTime()
 
 async function fetchAllHistoricalData(): Promise<any[][]> {
+  console.log('Fetching complete Bitcoin historical data from 2017 to present...')
+  
+  // Since Binance has a 1000 limit, we need to make multiple requests
   const allCandles: any[][] = []
   let currentStartTime = startTime
   const now = Date.now()
-  const limit = 1000 // Binance max limit per request
+  const maxLimit = 1000
+  let requestCount = 0
+  const maxRequests = 20 // Safety limit for Vercel timeout
   
-  // Primary and fallback URLs for Binance API
-  const getUrls = (start: number, lim: number) => [
-    `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`,
-    `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`,
-    `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`
-  ]
-  
-  while (currentStartTime < now) {
-    console.log(`Fetching data from: ${new Date(currentStartTime).toISOString()}`)
+  while (currentStartTime < now && requestCount < maxRequests) {
+    console.log(`Request ${requestCount + 1}: Fetching from ${new Date(currentStartTime).toISOString()}`)
     
-    const urls = getUrls(currentStartTime, limit)
+    const urls = [
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
+      `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
+      `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`
+    ]
+    
     const response = await fetchWithRetry(urls, { 
       next: { revalidate: 60 * 60 * 6 } // 6-hour cache
     })
@@ -37,22 +40,29 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
     allCandles.push(...batch)
     console.log(`Fetched ${batch.length} candles, total: ${allCandles.length}`)
     
-    // Move to the next batch - use the last timestamp + 1 day
-    const lastCandle = batch[batch.length - 1]
-    currentStartTime = lastCandle[0] + (24 * 60 * 60 * 1000) // Add 1 day in milliseconds
-    
     // If we got less than the limit, we've reached the end
-    if (batch.length < limit) {
-      console.log('Reached end of available data')
+    if (batch.length < maxLimit) {
+      console.log('Reached end of available data (partial batch)')
       break
     }
     
-    // Add a small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Move to next batch using the last timestamp + 1 millisecond
+    const lastCandle = batch[batch.length - 1]
+    currentStartTime = lastCandle[0] + 1
+    requestCount++
+    
+    // Small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  
+  if (requestCount >= maxRequests) {
+    console.log(`Hit maximum request limit (${maxRequests}), may not have complete data`)
   }
   
   console.log(`Total candles fetched: ${allCandles.length}`)
-  console.log(`Date range: ${new Date(allCandles[0]?.[0]).toISOString()} to ${new Date(allCandles[allCandles.length - 1]?.[0]).toISOString()}`)
+  if (allCandles.length > 0) {
+    console.log(`Date range: ${new Date(allCandles[0]?.[0]).toISOString()} to ${new Date(allCandles[allCandles.length - 1]?.[0]).toISOString()}`)
+  }
   
   return allCandles
 }

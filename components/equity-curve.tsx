@@ -37,6 +37,15 @@ export default function EquityCurve() {
         
         console.log('Received equity curve data:', runs.length, 'strategies')
         
+        // Log the date range of each strategy for debugging
+        runs.forEach(run => {
+          if (run.equityCurve.length > 0) {
+            const firstDate = new Date(run.equityCurve[0].ts).toISOString().substring(0, 10)
+            const lastDate = new Date(run.equityCurve[run.equityCurve.length - 1].ts).toISOString().substring(0, 10)
+            console.log(`${run.id}: ${run.equityCurve.length} data points from ${firstDate} to ${lastDate}`)
+          }
+        })
+        
         /* merge three curves on the same time axis ---------------------- */
         const tmp: Record<number, any> = {}
         
