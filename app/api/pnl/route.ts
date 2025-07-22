@@ -15,7 +15,7 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
   const now = Date.now()
   const maxLimit = 1000
   let requestCount = 0
-  const maxRequests = 20 // Safety limit for Vercel timeout
+  const maxRequests = 15 // We need ~9 years of data (2017-2025), should take ~4-5 requests
   
   while (currentStartTime < now && requestCount < maxRequests) {
     console.log(`Request ${requestCount + 1}: Fetching from ${new Date(currentStartTime).toISOString()}`)
@@ -46,17 +46,19 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
       break
     }
     
-    // Move to next batch using the last timestamp + 1 millisecond
+    // Move to next batch using the last timestamp + 1 day (86400000 ms)
     const lastCandle = batch[batch.length - 1]
-    currentStartTime = lastCandle[0] + 1
+    currentStartTime = lastCandle[0] + (24 * 60 * 60 * 1000)
     requestCount++
     
-    // Small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 50))
+    // No delay needed for daily data requests
   }
   
   if (requestCount >= maxRequests) {
     console.log(`Hit maximum request limit (${maxRequests}), may not have complete data`)
+    console.log(`Last timestamp processed: ${new Date(currentStartTime).toISOString()}`)
+  } else {
+    console.log(`Successfully completed data fetch in ${requestCount} requests`)
   }
   
   console.log(`Total candles fetched: ${allCandles.length}`)
