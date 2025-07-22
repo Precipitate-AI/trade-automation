@@ -25,13 +25,14 @@ export async function POST(req: NextRequest) {
     // Set leverage if provided
     if (leverage) {
       console.log(`Setting leverage for ${coin} to ${leverage}x`);
-      await sdk.exchange.updateLeverage(coin, LeverageModeEnum.CROSS, leverage.toString());
+      await sdk.exchange.updateLeverage(coin, LeverageModeEnum.CROSS, parseInt(leverage));
     }
 
     const orderRequest: any = {
       coin: coin,
       is_buy: isBuy,
       sz: size,
+    
       limit_px: limitPx,
       order_type: {},
       reduce_only: reduceOnly,

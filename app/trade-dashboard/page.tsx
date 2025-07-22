@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2, Clock, TrendingUp, MinusCircle, Loader2 } from "lucide-react";
+import dynamic from 'next/dynamic';
+
+const DynamicEquityCurve = dynamic(() => import('@/components/equity-curve'), { ssr: false });
 
 // Define a type for our bot's status object for great TypeScript support
 type BotStatus = {
@@ -16,6 +19,8 @@ type BotStatus = {
   };
   lastSignal: string; // This will be a placeholder until we add a database
 };
+
+
 
 // This is the static log data you provided. It's kept for UI purposes
 // until a database is integrated to store real-time logs.
@@ -145,6 +150,12 @@ export default function TradeDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Equity Curve Graph */}
+          <Card className="mb-8 bg-precipitate-light/5 border-precipitate-light/20">
+            <CardHeader><CardTitle>Equity Curves (since 2017-01-01)</CardTitle></CardHeader>
+            <CardContent><DynamicEquityCurve /></CardContent>
+          </Card>
 
           {/* Activity Log Table (Using Static Data as Placeholder) */}
           <Card className="bg-precipitate-light/5 border-precipitate-light/20 text-precipitate-light">
