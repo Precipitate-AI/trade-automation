@@ -125,10 +125,10 @@ export default function EquityCurve() {
 
   if (isLoading) {
     return (
-      <div className="w-full h-[500px] flex items-center justify-center text-precipitate-light/60">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-precipitate-light/60 mx-auto mb-4"></div>
-          Loading equity curves...
+      <div className="w-full h-[400px] sm:h-[500px] flex items-center justify-center text-precipitate-light/60">
+        <div className="text-center px-4">
+          <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-precipitate-light/60 mx-auto mb-3 sm:mb-4"></div>
+          <div className="text-sm sm:text-base">Loading equity curves...</div>
         </div>
       </div>
     )
@@ -136,13 +136,13 @@ export default function EquityCurve() {
 
   if (error) {
     return (
-      <div className="w-full h-[500px] flex items-center justify-center text-precipitate-light/60">
-        <div className="text-center">
-          <div className="text-red-400 mb-2">⚠️ Unable to load equity curves</div>
-          <div className="text-sm text-precipitate-light/40">{error}</div>
+      <div className="w-full h-[400px] sm:h-[500px] flex items-center justify-center text-precipitate-light/60">
+        <div className="text-center px-4 max-w-sm">
+          <div className="text-red-400 mb-2 text-sm sm:text-base">⚠️ Unable to load equity curves</div>
+          <div className="text-xs sm:text-sm text-precipitate-light/40 mb-4">{error}</div>
           <button 
             onClick={() => window.location.reload()} 
-            className="mt-4 px-4 py-2 bg-precipitate-blue hover:bg-precipitate-blue/80 rounded text-white text-sm"
+            className="px-3 py-2 sm:px-4 sm:py-2 bg-precipitate-blue hover:bg-precipitate-blue/80 rounded text-white text-xs sm:text-sm transition-colors"
           >
             Retry
           </button>
@@ -165,9 +165,17 @@ export default function EquityCurve() {
   }
 
   return (
-    <div className="w-full h-[500px] bg-gradient-to-br from-precipitate-dark to-precipitate-dark/90 rounded-lg p-4">
+    <div className="w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-precipitate-dark to-precipitate-dark/90 rounded-lg p-2 sm:p-4">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+        <AreaChart 
+          data={data} 
+          margin={{ 
+            top: 10, 
+            right: 10, 
+            left: 0, 
+            bottom: 40 
+          }}
+        >
           <defs>
             <linearGradient id="baseGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
@@ -183,56 +191,71 @@ export default function EquityCurve() {
             </linearGradient>
           </defs>
           
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
           
           <XAxis
             dataKey="ts"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
-            tickFormatter={(ts) => dayjs(ts).format("YYYY")}
+            tickFormatter={(ts) => dayjs(ts).format("YY")}
             stroke="#9CA3AF"
-            fontSize={12}
-            tickMargin={10}
-            minTickGap={80}
-            tickCount={8}
+            fontSize={10}
+            tickMargin={5}
+            minTickGap={40}
+            tickCount={6}
+            height={30}
           />
           
           <YAxis
             domain={['dataMin * 0.95', 'dataMax * 1.05']}
             tickFormatter={formatCurrency}
             stroke="#9CA3AF"
-            fontSize={12}
-            tickMargin={10}
+            fontSize={10}
+            tickMargin={5}
             orientation="left"
+            width={50}
+            axisLine={false}
+            tickLine={false}
           />
           
           <Tooltip
-            labelFormatter={(ts) => `Date: ${dayjs(ts as number).format("MMMM D, YYYY")}`}
-            formatter={(value: number, name: string) => [formatTooltipCurrency(value), name]}
+            labelFormatter={(ts) => `${dayjs(ts as number).format("MMM D, YYYY")}`}
+            formatter={(value: number, name: string) => [
+              formatTooltipCurrency(value), 
+              name.replace(' Strategy', '').replace(' + Stop Loss', ' + SL')
+            ]}
             contentStyle={{
               backgroundColor: '#1F2937',
               border: '1px solid #374151',
               borderRadius: '8px',
               color: '#F9FAFB',
-              fontSize: '14px'
+              fontSize: '12px',
+              padding: '8px',
+              maxWidth: '200px'
             }}
-            labelStyle={{ color: '#D1D5DB', fontWeight: 'bold' }}
+            labelStyle={{ 
+              color: '#D1D5DB', 
+              fontWeight: 'bold',
+              fontSize: '11px'
+            }}
           />
           
           <Legend 
             wrapperStyle={{ 
-              paddingTop: '20px',
+              paddingTop: '15px',
               color: '#D1D5DB',
-              fontSize: '14px'
+              fontSize: '11px'
             }}
+            iconSize={12}
+            formatter={(value) => value.replace(' Strategy', '').replace(' + Stop Loss', ' + SL')}
           />
           
           <Area
             type="monotone"
             dataKey="Base Strategy (1x)"
             stroke="#3B82F6"
-            strokeWidth={2.5}
+            strokeWidth={2}
             fill="url(#baseGradient)"
             dot={false}
             connectNulls={true}
@@ -242,7 +265,7 @@ export default function EquityCurve() {
             type="monotone"
             dataKey="Leveraged 3x + Stop Loss"
             stroke="#10B981"
-            strokeWidth={2.5}
+            strokeWidth={2}
             fill="url(#lev3Gradient)"
             dot={false}
             connectNulls={true}
@@ -252,7 +275,7 @@ export default function EquityCurve() {
             type="monotone"
             dataKey="Leveraged 5x + Stop Loss"
             stroke="#F59E0B"
-            strokeWidth={2.5}
+            strokeWidth={2}
             fill="url(#lev5Gradient)"
             dot={false}
             connectNulls={true}
