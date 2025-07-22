@@ -6,12 +6,56 @@ import type { DailyCandle } from "@/lib/utils"
 // Start from 2017-01-01 (Bitcoin data available from this point)
 const startTime = new Date('2017-01-01').getTime()
 
-// Primary and fallback URLs for Binance API
-const binanceURLs = [
-  `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${startTime}&limit=5000`,
-  `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${startTime}&limit=5000`,
-  `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${startTime}&limit=5000`
-]
+async function fetchAllHistoricalData(): Promise<any[][]> {
+  const allCandles: any[][] = []
+  let currentStartTime = startTime
+  const now = Date.now()
+  const limit = 1000 // Binance max limit per request
+  
+  // Primary and fallback URLs for Binance API
+  const getUrls = (start: number, lim: number) => [
+    `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`,
+    `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`,
+    `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&limit=${lim}`
+  ]
+  
+  while (currentStartTime < now) {
+    console.log(`Fetching data from: ${new Date(currentStartTime).toISOString()}`)
+    
+    const urls = getUrls(currentStartTime, limit)
+    const response = await fetchWithRetry(urls, { 
+      next: { revalidate: 60 * 60 * 6 } // 6-hour cache
+    })
+    
+    const batch = await response.json() as any[][]
+    
+    if (!Array.isArray(batch) || batch.length === 0) {
+      console.log('No more data available')
+      break
+    }
+    
+    allCandles.push(...batch)
+    console.log(`Fetched ${batch.length} candles, total: ${allCandles.length}`)
+    
+    // Move to the next batch - use the last timestamp + 1 day
+    const lastCandle = batch[batch.length - 1]
+    currentStartTime = lastCandle[0] + (24 * 60 * 60 * 1000) // Add 1 day in milliseconds
+    
+    // If we got less than the limit, we've reached the end
+    if (batch.length < limit) {
+      console.log('Reached end of available data')
+      break
+    }
+    
+    // Add a small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  console.log(`Total candles fetched: ${allCandles.length}`)
+  console.log(`Date range: ${new Date(allCandles[0]?.[0]).toISOString()} to ${new Date(allCandles[allCandles.length - 1]?.[0]).toISOString()}`)
+  
+  return allCandles
+}
 
 async function fetchWithRetry(urls: string[], options?: RequestInit): Promise<Response> {
   let lastError: Error | null = null
@@ -49,16 +93,8 @@ export async function GET() {
   try {
     console.log('Starting PnL API request...')
     
-    const raw = await fetchWithRetry(binanceURLs, { 
-      next: { revalidate: 60 * 60 * 6 } // 6-hour cache
-    })
-    
-    if (!raw.ok) {
-      throw new Error(`Binance API error: ${raw.status} ${raw.statusText}`)
-    }
-    
-    const kl = await raw.json() as any[][]
-    console.log(`Fetched ${kl.length} candles from Binance`)
+    const kl = await fetchAllHistoricalData()
+    console.log(`Fetched ${kl.length} candles from Binance (full historical data)`)
     
     if (!Array.isArray(kl) || kl.length === 0) {
       throw new Error('No candle data received from Binance API')
