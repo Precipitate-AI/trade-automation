@@ -15,7 +15,7 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
   const now = Date.now()
   const maxLimit = 1000
   let requestCount = 0
-  const maxRequests = 15 // We need ~9 years of data (2017-2025), should take ~4-5 requests
+  const maxRequests = 25 // Increased to ensure complete 2017-2025 coverage, ~8.5 years = ~3100 days
   
   while (currentStartTime < now && requestCount < maxRequests) {
     console.log(`Request ${requestCount + 1}: Fetching from ${new Date(currentStartTime).toISOString()}`)
@@ -46,9 +46,9 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
       break
     }
     
-    // Move to next batch using the last timestamp + 1 day (86400000 ms)
+    // Move to next batch using the last timestamp + 1 millisecond to avoid gaps
     const lastCandle = batch[batch.length - 1]
-    currentStartTime = lastCandle[0] + (24 * 60 * 60 * 1000)
+    currentStartTime = lastCandle[0] + 1
     requestCount++
     
     // No delay needed for daily data requests
@@ -61,12 +61,23 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
     console.log(`Successfully completed data fetch in ${requestCount} requests`)
   }
   
-  console.log(`Total candles fetched: ${allCandles.length}`)
-  if (allCandles.length > 0) {
-    console.log(`Date range: ${new Date(allCandles[0]?.[0]).toISOString()} to ${new Date(allCandles[allCandles.length - 1]?.[0]).toISOString()}`)
+  // Remove duplicates and sort by timestamp to ensure proper order
+  const uniqueCandles = Array.from(
+    new Map(allCandles.map(candle => [candle[0], candle])).values()
+  ).sort((a, b) => a[0] - b[0])
+  
+  console.log(`Total candles fetched: ${allCandles.length}, unique candles: ${uniqueCandles.length}`)
+  if (uniqueCandles.length > 0) {
+    console.log(`Date range: ${new Date(uniqueCandles[0]?.[0]).toISOString()} to ${new Date(uniqueCandles[uniqueCandles.length - 1]?.[0]).toISOString()}`)
+    
+    // Log some sample dates to verify continuity
+    const sampleDates = uniqueCandles
+      .filter((_, index) => index % Math.floor(uniqueCandles.length / 10) === 0)
+      .map(candle => new Date(candle[0]).toISOString().substring(0, 10))
+    console.log(`Sample dates: ${sampleDates.join(', ')}`)
   }
   
-  return allCandles
+  return uniqueCandles
 }
 
 async function fetchWithRetry(urls: string[], options?: RequestInit): Promise<Response> {
