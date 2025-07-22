@@ -18,6 +18,15 @@ export default function EquityCurve() {
   const [data, setData] = useState<Point[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Check if mobile on mount
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     ;(async () => {
@@ -198,12 +207,29 @@ export default function EquityCurve() {
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
-            tickFormatter={(ts) => dayjs(ts).format("YY")}
+            tickFormatter={(ts) => dayjs(ts).format("YYYY")}
             stroke="#9CA3AF"
             fontSize={10}
             tickMargin={5}
-            minTickGap={40}
-            tickCount={6}
+            minTickGap={60}
+            interval="preserveStartEnd"
+            ticks={isMobile ? [
+              new Date('2017-01-01').getTime(),
+              new Date('2019-01-01').getTime(),
+              new Date('2021-01-01').getTime(),
+              new Date('2023-01-01').getTime(),
+              new Date('2025-01-01').getTime()
+            ] : [
+              new Date('2017-01-01').getTime(),
+              new Date('2018-01-01').getTime(),
+              new Date('2019-01-01').getTime(),
+              new Date('2020-01-01').getTime(),
+              new Date('2021-01-01').getTime(),
+              new Date('2022-01-01').getTime(),
+              new Date('2023-01-01').getTime(),
+              new Date('2024-01-01').getTime(),
+              new Date('2025-01-01').getTime()
+            ]}
             height={30}
           />
           
