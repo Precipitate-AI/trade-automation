@@ -17,15 +17,25 @@ const INITIAL_CAPITAL = 10000 // $10,000 starting capital
 export default function EquityCurve() {
   const [data, setData] = useState<Point[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
       try {
+        console.log('Fetching equity curve data...')
         const res = await fetch('/api/pnl')
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.details || `API Error: ${res.status}`)
+        }
+        
         const runs = await res.json() as {
           id: "BASE_1x" | "LEV3_SL63" | "LEV5_SL63"
           equityCurve: { ts: number; eq: number }[]
         }[]
+        
+        console.log('Received equity curve data:', runs.length, 'strategies')
         
         /* merge three curves on the same time axis ---------------------- */
         const tmp: Record<number, any> = {}
@@ -93,8 +103,11 @@ export default function EquityCurve() {
         })
         
         setData(merged)
+        setError(null)
+        console.log('Equity curve data processed successfully')
       } catch (error) {
         console.error("Failed to fetch equity curve data:", error)
+        setError(error instanceof Error ? error.message : 'Failed to load equity curve data')
       } finally {
         setIsLoading(false)
       }
@@ -104,7 +117,27 @@ export default function EquityCurve() {
   if (isLoading) {
     return (
       <div className="w-full h-[500px] flex items-center justify-center text-precipitate-light/60">
-        Loading equity curves...
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-precipitate-light/60 mx-auto mb-4"></div>
+          Loading equity curves...
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-[500px] flex items-center justify-center text-precipitate-light/60">
+        <div className="text-center">
+          <div className="text-red-400 mb-2">⚠️ Unable to load equity curves</div>
+          <div className="text-sm text-precipitate-light/40">{error}</div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-precipitate-blue hover:bg-precipitate-blue/80 rounded text-white text-sm"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }
