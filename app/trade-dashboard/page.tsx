@@ -153,8 +153,35 @@ export default function TradeDashboardPage() {
 
           {/* Equity Curve Graph */}
           <Card className="mb-8 bg-precipitate-light/5 border-precipitate-light/20">
-            <CardHeader><CardTitle>Equity Curves (since 2017-01-01)</CardTitle></CardHeader>
-            <CardContent><DynamicEquityCurve /></CardContent>
+            <CardHeader><CardTitle className="text-white">Equity Curves (since 2017-01-01)</CardTitle></CardHeader>
+            <CardContent>
+              <DynamicEquityCurve />
+              
+              {/* Strategy Explanations */}
+              <div className="mt-6 p-4 bg-precipitate-light/5 rounded-lg border border-precipitate-light/10">
+                <h3 className="text-lg font-semibold text-white mb-3">Trading Strategies</h3>
+                <div className="space-y-3 text-sm text-precipitate-light/80">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full mt-1 flex-shrink-0"></div>
+                    <div>
+                      <span className="font-medium text-blue-400">Base Strategy (1x)</span>: Buy/sell signals based on 5-day EMA crossovers with no leverage or stop loss. Conservative approach capturing Bitcoin's long-term trend.
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
+                    <div>
+                      <span className="font-medium text-green-400">Leveraged 3x + Stop Loss</span>: Same EMA signals with 3x leverage and 6.3% stop loss protection. Amplifies gains while limiting downside risk.
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-3 h-3 bg-amber-500 rounded-full mt-1 flex-shrink-0"></div>
+                    <div>
+                      <span className="font-medium text-amber-400">Leveraged 5x + Stop Loss</span>: Highest risk/reward strategy with 5x leverage and 6.3% stop loss. Maximum amplification of EMA-based signals.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
           </Card>
 
           {/* Activity Log Table (Using Static Data as Placeholder) */}
