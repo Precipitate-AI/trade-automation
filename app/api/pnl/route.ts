@@ -22,8 +22,10 @@ async function fetchAllHistoricalData(): Promise<any[][]> {
     
     const urls = [
       `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`
+      `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
+      `https://api2.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
+      `https://api3.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
+      `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`
     ]
     
     const response = await fetchWithRetry(urls, { 
@@ -98,6 +100,9 @@ async function fetchWithRetry(urls: string[], options?: RequestInit): Promise<Re
       if (response.ok) {
         console.log(`Successfully fetched from: ${url}`)
         return response
+      } else if (response.status === 451) {
+        console.log(`HTTP 451 from ${url}: Unavailable for legal reasons, trying next endpoint...`)
+        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`)
       } else {
         console.log(`HTTP ${response.status} from ${url}: ${response.statusText}`)
         lastError = new Error(`HTTP ${response.status}: ${response.statusText}`)
