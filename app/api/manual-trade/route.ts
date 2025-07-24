@@ -22,6 +22,23 @@ export async function POST(req: NextRequest) {
     // Log all available assets
     const allAssets = await sdk.custom.getAllAssets();
     console.log("All available assets:", allAssets);
+    // Get current price
+    const mids = await sdk.info.getAllMids();
+    const currentPrice = +mids[coin];
+    console.log(`Current ${coin} price: ${currentPrice}`);
+
+    // Get current position to determine if closing
+    const state = await sdk.info.perpetuals.getClearinghouseState(wallet.address);
+    const posObj = state.assetPositions.find((p: any) => p.position.coin === coin);
+    const currentPosition = posObj ? +posObj.position.szi : 0;
+    console.log(`Current ${coin} position: ${currentPosition}`);
+
+    // If this is a sell and we have a position, close the entire position
+    if (!isBuy && currentPosition > 0) {
+      console.log(`Closing entire position of ${currentPosition} ${coin}`);
+      size = Math.abs(currentPosition); // Override size with full position
+    }
+
     // Set leverage if provided
     if (leverage) {
       console.log(`Setting leverage for ${coin} to ${leverage}x`);
@@ -31,17 +48,19 @@ export async function POST(req: NextRequest) {
     const orderRequest: any = {
       coin: coin,
       is_buy: isBuy,
-      sz: size,
+      sz: +size, // Coerce to number
     
-      limit_px: limitPx,
+      limit_px: +limitPx, // Coerce to number
       order_type: {},
-      reduce_only: reduceOnly,
+      reduce_only: !isBuy && currentPosition > 0 ? true : reduceOnly, // Auto reduce-only for position closing
     };
 
     if (orderType === 'market') {
-      orderRequest.order_type.market = { tif: "Ioc" };
+      orderRequest.order_type = { limit: { tif: "Ioc" } }; // Market-like using IOC limit
+      // Use price within 5% of current market for immediate fill
+      orderRequest.limit_px = isBuy ? Math.round(currentPrice * 1.05) : Math.round(currentPrice * 0.95);
     } else if (orderType === 'limit') {
-      orderRequest.order_type.limit = { tif: "Gtc" }; // Good-Till-Cancelled for limit orders
+      orderRequest.order_type = { limit: { tif: "Gtc" } }; // Good-Till-Cancelled for limit orders
     } else {
       return NextResponse.json({ error: "Invalid orderType. Must be 'market' or 'limit'." }, { status: 400 });
     }

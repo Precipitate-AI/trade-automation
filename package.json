@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@nktkas/hyperliquid": "^0.23.1",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -39,6 +40,7 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@tanstack/react-query": "latest",
     "autoprefixer": "^10.4.20",
+    "ccxt": "^4.4.96",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
@@ -46,11 +48,13 @@
     "dayjs": "^1.11.13",
     "embla-carousel-react": "8.5.1",
     "ethers": "^6.13.4",
+    "hyperliquid": "^1.7.6",
     "hyperliquid-sdk": "^2.4.2",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "latest",
+    "node-fetch": "^3.3.2",
     "react": "^18.2.0",
     "react-day-picker": "8.10.1",
     "react-dom": "^18.2.0",
@@ -64,6 +68,7 @@
     "vaul": "^0.9.6",
     "viem": "^2.22.17",
     "wagmi": "^2.14.9",
+    "ws": "^8.18.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
