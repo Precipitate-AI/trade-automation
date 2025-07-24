@@ -3,118 +3,31 @@ import { NextResponse } from "next/server"
 import { backtest, StrategyRun } from "@/lib/backtest"
 import type { DailyCandle } from "@/lib/utils"
 
-// Start from 2017-01-01 (Bitcoin data available from this point)
-const startTime = new Date('2017-01-01').getTime()
-
 async function fetchAllHistoricalData(): Promise<any[][]> {
-  console.log('Fetching complete Bitcoin historical data from 2017 to present...')
+  console.log('Fetching complete Bitcoin historical data from CoinGecko...')
   
-  // Since Binance has a 1000 limit, we need to make multiple requests
-  const allCandles: any[][] = []
-  let currentStartTime = startTime
-  const now = Date.now()
-  const maxLimit = 1000
-  let requestCount = 0
-  const maxRequests = 25 // Increased to ensure complete 2017-2025 coverage, ~8.5 years = ~3100 days
+  const url = `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=max&interval=daily`
   
-  while (currentStartTime < now && requestCount < maxRequests) {
-    console.log(`Request ${requestCount + 1}: Fetching from ${new Date(currentStartTime).toISOString()}`)
-    
-    const urls = [
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api1.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api2.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api3.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`,
-      `https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${currentStartTime}&limit=${maxLimit}`
-    ]
-    
-    const response = await fetchWithRetry(urls, { 
-      next: { revalidate: 60 * 60 * 6 } // 6-hour cache
-    })
-    
-    const batch = await response.json() as any[][]
-    
-    if (!Array.isArray(batch) || batch.length === 0) {
-      console.log('No more data available')
-      break
-    }
-    
-    allCandles.push(...batch)
-    console.log(`Fetched ${batch.length} candles, total: ${allCandles.length}`)
-    
-    // If we got less than the limit, we've reached the end
-    if (batch.length < maxLimit) {
-      console.log('Reached end of available data (partial batch)')
-      break
-    }
-    
-    // Move to next batch using the last timestamp + 1 millisecond to avoid gaps
-    const lastCandle = batch[batch.length - 1]
-    currentStartTime = lastCandle[0] + 1
-    requestCount++
-    
-    // No delay needed for daily data requests
+  const response = await fetch(url, { 
+    next: { revalidate: 60 * 60 * 6 } // 6-hour cache
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch from CoinGecko: ${response.statusText}`)
   }
   
-  if (requestCount >= maxRequests) {
-    console.log(`Hit maximum request limit (${maxRequests}), may not have complete data`)
-    console.log(`Last timestamp processed: ${new Date(currentStartTime).toISOString()}`)
-  } else {
-    console.log(`Successfully completed data fetch in ${requestCount} requests`)
-  }
+  const data = await response.json()
   
-  // Remove duplicates and sort by timestamp to ensure proper order
-  const uniqueCandles = Array.from(
-    new Map(allCandles.map(candle => [candle[0], candle])).values()
-  ).sort((a, b) => a[0] - b[0])
-  
-  console.log(`Total candles fetched: ${allCandles.length}, unique candles: ${uniqueCandles.length}`)
-  if (uniqueCandles.length > 0) {
-    console.log(`Date range: ${new Date(uniqueCandles[0]?.[0]).toISOString()} to ${new Date(uniqueCandles[uniqueCandles.length - 1]?.[0]).toISOString()}`)
-    
-    // Log some sample dates to verify continuity
-    const sampleDates = uniqueCandles
-      .filter((_, index) => index % Math.floor(uniqueCandles.length / 10) === 0)
-      .map(candle => new Date(candle[0]).toISOString().substring(0, 10))
-    console.log(`Sample dates: ${sampleDates.join(', ')}`)
-  }
-  
-  return uniqueCandles
-}
+  // Convert CoinGecko data to the format expected by the backtesting function
+  // CoinGecko returns [timestamp, price], we need [timestamp, open, high, low, close]
+  // We will use the price for all OHLC values
+  const candles = data.prices.map((priceData: [number, number]) => {
+    const [timestamp, price] = priceData
+    return [timestamp, price, price, price, price]
+  })
 
-async function fetchWithRetry(urls: string[], options?: RequestInit): Promise<Response> {
-  let lastError: Error | null = null
-  
-  for (const url of urls) {
-    try {
-      console.log(`Attempting to fetch from: ${url}`)
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; trade-automation/1.0)',
-          ...options?.headers
-        }
-      })
-      
-      if (response.ok) {
-        console.log(`Successfully fetched from: ${url}`)
-        return response
-      } else if (response.status === 451) {
-        console.log(`HTTP 451 from ${url}: Unavailable for legal reasons, trying next endpoint...`)
-        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`)
-      } else {
-        console.log(`HTTP ${response.status} from ${url}: ${response.statusText}`)
-        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-    } catch (error) {
-      console.log(`Error fetching from ${url}:`, error)
-      lastError = error as Error
-      continue
-    }
-  }
-  
-  throw lastError || new Error('All API endpoints failed')
+  console.log(`Successfully fetched ${candles.length} candles from CoinGecko`)
+  return candles
 }
 
 export async function GET() {
