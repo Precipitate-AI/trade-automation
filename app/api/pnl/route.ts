@@ -35,10 +35,10 @@ export async function GET() {
     console.log('Starting PnL API request...')
     
     const kl = await fetchAllHistoricalData()
-    console.log(`Fetched ${kl.length} candles from Binance (full historical data)`)
+    console.log(`Fetched ${kl.length} candles from CoinGecko (full historical data)`)
     
     if (!Array.isArray(kl) || kl.length === 0) {
-      throw new Error('No candle data received from Binance API')
+      throw new Error('No candle data received from CoinGecko API')
     }
 
     const candles: DailyCandle[] = kl.map(k => ({
@@ -71,7 +71,7 @@ export async function GET() {
       { 
         error: (err as Error).message,
         timestamp: new Date().toISOString(),
-        details: 'Failed to fetch Bitcoin price data. This may be due to API rate limits or regional restrictions.'
+        details: 'Failed to fetch Bitcoin price data from CoinGecko.'
       }, 
       { status: 500 }
     )
